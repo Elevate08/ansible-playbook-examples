@@ -1,0 +1,56 @@
+---
+- name:  Patch Procedure
+  hosts: host9.fqdn.domain
+  become: True
+  become_user: application_user
+  gather_facts: False
+  tasks:
+    - name: Stop Services
+      command: sh /path/to/provided/sh/script stop
+
+- name: Specific Subset of servers
+  hosts:
+    - host1.fqdn.domain
+    - host2.fqdn.domain
+    - host3.fqdn.domain
+    - host4.fqdn.domain
+  become: True
+  become_user: application_user
+  gather_facts: False
+  tasks:
+    - name: Stop Services
+      command: sh /path/to/provided/sh/script stop
+
+- name: Install Security Patches
+  import_playbook: RHEL_Patching_Security.yml
+
+- name: Reboot after patching
+  hosts: all
+  become: True
+  gather_facts: False
+  tasks:
+    - name: Rebooting Server
+      reboot:
+
+- name: Application Server Start Services, setting serial to 1 to ensure servers start services in desired order
+  hosts:
+    - host5.fqdn.domain
+    - host6.fqdn.domain
+    - host7.fqdn.domain
+    - host8.fqdn.domain
+  become: True
+  become_user: application_user
+  serial: 1
+  gather_facts: False
+  tasks:
+    - name: Stop Services
+      command: sh /path/to/provided/sh/script start
+
+- name: HEF-Test Patch Procedure
+  hosts: host9.fqdn.domain
+  become: True
+  become_user: application_user
+  gather_facts: False
+  tasks:
+    - name: Stop Services
+      command: sh /path/to/provided/sh/script start

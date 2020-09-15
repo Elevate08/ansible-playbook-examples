@@ -1,0 +1,128 @@
+---
+- name: Deploying VM from Template
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Create VM
+      vmware_guest:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        folder: "{{ vm_folder }}"
+        name: "{{ vm_name }}"
+        template: "{{ template_name }}"
+        datacenter: "{{ datacenter }}"
+        state: poweredon
+        cluster: "{{ vm_host }}"
+        customization:
+          dns_servers:
+            - x.x.x.x
+            - y.y.y.y
+          dns_suffix:
+            - contoso.com
+          hostname: "{{ vm_name }}"
+          domain: "contoso.com"
+          timezone: "America/New_York"
+        disk:
+        - size_gb: "{{ vm_disk }}"
+          datastore: "{{ vm_datastore }}"
+        hardware:
+          memory_mb: "{{ vm_memory }}"
+          num_cpus: "{{ vm_cpu }}"
+          num_cpu_cores_per_socket: "{{ vm_cores }}"
+          scsi: paravirtual
+          boot_firmware: "efi"
+        networks:
+        - name: "{{ vm_portgroup }}"
+          type: static
+          ip: "{{ vm_ipaddress }}"
+          netmask: "{{ vm_netmask }}"
+          gateway: "{{ vm_gateway }}"
+          device_type: vmxnet3
+          start_connected: True
+        wait_for_customization: True
+        wait_for_ip_address: True
+    - name: Subscription Script
+      vmware_vm_shell:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter }}"
+        folder: "{{ vm_folder }}"
+        vm_id: "{{ vm_name }}"
+        vm_username: root
+        vm_password: "{{ vm_password }}"
+        validate_certs: no
+        vm_shell: "/tmp/subscription.sh"
+        vm_shell_args: "{{ activation_key }} >> /tmp/satellite-activation.log"
+        wait_for_process: True
+    - name: Install Katello
+      vmware_vm_shell:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        datacenter: "{{ datacenter }}"
+        folder: "{{ vm_folder }}"
+        vm_id: "{{ vm_name }}"
+        vm_username: root
+        vm_password: "{{ vm_password }}"
+        validate_certs: no
+        vm_shell_env:
+          - "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin"
+        vm_shell_cwd: "/tmp"
+        vm_shell: "/bin/yum"
+        vm_shell_args: "-y install katello-agent"
+        wait_for_process: True
+
+    - name: Assign Tags to VM
+      vmware_tag_manager:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ vcenter_username }}"
+        password: "{{ vcenter_password }}"
+        validate_certs: no
+        tag_names:
+          - "os:{{ vm_os }}"
+          - "owner:{{ vm_owner }}"
+          - "function:{{ vm_function }}"
+          - "environment:{{ vm_environment }}"
+          - "application:{{ vm_application }}"
+        object_name: "{{ vm_name }}"
+        object_type: VirtualMachine
+        state: add
+
+- name: Add new VM to group for next play
+  hosts: localhost
+  tasks:
+  - name: Add Host
+    add_host:
+      name: "{{ vm_ipaddress }}"
+      groups: new_vm
+
+- name: Run Standard Playbook Roles on New VM
+  hosts: new_vm
+  become: true
+  roles:
+    - motd
+    - openscap
+    - selinux
+    - ntp
+    - ssh
+    - root_user
+    - vmtools
+    - resolv
+    - sudoers
+    - realm
+    - sssd
+    - snmp
+
+- name: Patch and Reboot New VM
+  hosts: new_vm
+  become: true
+  tasks:
+    - name: Update System
+      dnf:
+        name: "*"
+        state: latest
+    - name: Reboot
+      reboot:
